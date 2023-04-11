@@ -1044,8 +1044,77 @@ If there is no **happens-before** relationship between the first two operations,
 If there is a **happens-before** relationship between the first two operations, the value of **y** is **1**. In other
 words, **operation 1 happens before operation 2**.
 
-A "happens-before" link exists between all synchronized or volatile write operations and all synchronized or volatile
-read operations that follow.
+A **"happens-before"** link exists between all **synchronized** or **volatile** _write_ operations and all
+**synchronized** or **volatile** _read_ operations that follow.
 
+Example code:
 
+```
+int counter;
 
+void increment() {
+    counter++;
+}
+
+void print() {
+    System.out.println(counter);
+}
+```
+
+There are 2 operations here:
+
+- a write operation - `increment()`
+- a read operation - `print()`
+
+In multithreaded code, we don't know what the value of `counter` will be.
+
+If we use **synchronized** block here, **"happens-before"**  relationship is established and `counter` variable is
+**visible**.
+
+```
+int counter;
+
+void synchronized increment() {
+    counter++;
+}
+
+void synchronized print() {
+    System.out.println(counter);
+}
+```
+
+Similarly, if we use **volatile** keyword, **"happens-before"**  relationship is established and `counter` variable is
+**visible**.
+
+```
+volatile int counter;
+
+void increment() {
+    counter++;
+}
+
+void print() {
+    System.out.println(counter);
+}
+```
+
+#### False Sharing
+
+In computer science, false sharing is a performance-degrading usage pattern that can arise in systems with distributed,
+coherent caches at the size of the smallest resource block managed by the caching mechanism.
+
+False sharing in Java occurs when two threads running on two different CPUs write to two different variables which
+happen to be stored within the same CPU cache line. When the first thread modifies one of the variables - the whole CPU
+cache line is invalidated in the CPU caches of the other CPU where the other thread is running. This means, that the
+other CPUs need to reload the content of the invalidated cache line - even if they don't really need the variable that
+was modified within that cache line.
+
+![False Sharing](FalseSharing.PNG)
+
+#### Interview Problem 6 (SCB): Demonstrate false sharing in Java
+
+Write a program to demonstrate false sharing in Java.
+
+**Follow up**
+
+Modify the program to resolve false sharing and improve performance. (Measure the performance)
