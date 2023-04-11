@@ -976,3 +976,76 @@ NOTE: If a thread is not running, can it be given hand by the thread scheduler ?
 Answer is **no** => thread scheduler will only schedule threads which are in **RUNNABLE** state.
 
 ---
+
+### Chapter 02. Ordering read and write operations
+
+#### Synchronization and Visibility
+
+**Synchronization** in Java is the capability to control the access of multiple threads to any shared resource. It
+guarantees that a particular block of code or method is executed by ONLY one thread at a time. Thus, it prevents race
+condition.
+
+In the modern CPU architecture, CPU does not read a variable from the main memory but from a cache.
+
+![CPU and caches](CPUCaches.PNG)
+
+It has been designed as such to provide maximum performance:
+
+- access to the main memory (RAM) =~ 100 ns
+- access to the L2 cache =~ 7 ns
+- access to the L1 cache =~ 0.5 ns
+
+However, the data which can be stored is much less in caches than main memory. For ex: RAM can be in several GBs but L2
+cache will be typically 256 KB and L1 cache will be around 32 KB only. So, only with very efficient caching strategy -
+high performance can be achieved.
+
+**Visibility**
+
+A variable is said visible if the writes made on it by some thread is visible to all the other threads.
+
+If two or more threads are sharing an object, without the proper use of either `volatile` declarations or
+`synchronization`, updates to the shared object made by one thread may not be visible to other threads.
+
+Imagine that the shared object is initially stored in main memory. A thread running on CPU one then reads the shared
+object into its CPU cache. There it makes a change to the shared object. As long as the CPU cache has not been flushed
+back to main memory, the changed version of the shared object is not visible to threads running on other CPUs. This way
+each thread may end up with its own copy of the shared object, each copy sitting in a different CPU cache.
+
+To solve this problem we can use Java's **volatile** keyword or wrap the variable inside **synchronized** block. The
+**volatile** keyword can make sure that a given variable is read directly from main memory, and always written back to
+main memory when updated.
+
+Similarly, all the **synchronized writes** are **visible**.
+
+#### Java Memory Model
+
+According to Java Memory Model specs:
+
+> A program must be correctly synchronized to avoid reordering and visibility problems.
+
+A program is correctly synchronized if:
+
+- Actions are ordered by **happens-before** relationship.
+- Has no data races. Data races can be avoided by using **Intrinsic Locks**.
+
+Multicore CPU brings new problems: Read and writes can really happen at the same time. A given variable can be stored in
+more than one place. Visibility means "a read should return the value set by the **last** write".
+
+Thus, we need a **timeline** to put read and write operations.
+
+For ex:
+
+1. A thread **T1** writes 1 to **x**: `x = 1;`
+2. Another thread **T2** reads **x** and copy it to **y**: `y = x;`
+3. What is the value of **y**?
+
+If there is no **happens-before** relationship between the first two operations, the value of **y** is **unknown**.
+
+If there is a **happens-before** relationship between the first two operations, the value of **y** is **1**. In other
+words, **operation 1 happens before operation 2**.
+
+A "happens-before" link exists between all synchronized or volatile write operations and all synchronized or volatile
+read operations that follow.
+
+
+
