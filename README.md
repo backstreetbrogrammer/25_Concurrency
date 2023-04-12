@@ -15,9 +15,10 @@ Tools used:
     - Threading fundamentals
     - Thread coordination
 2. Ordering read and write operations
-    - Happens Before
-    - Synchronization and Volatile
+    - Synchronization and Visibility
+    - Java Memory Model
     - False Sharing
+    - Singleton pattern
 3. Executor Pattern, Futures and Callables
 4. Advanced Locking and Semaphores
 5. Using Barriers and Latches
@@ -1115,11 +1116,313 @@ triggers a refresh of this line -> which is to flush the data from main memory.
 
 ![False Sharing](FalseSharing.PNG)
 
-#### Interview Problem 6 (SCB): Demonstrate false sharing in Java
+#### Interview Problem 6 (Standard Chartered Bank): Demonstrate false sharing in Java
 
 Write a program to demonstrate false sharing in Java.
 
 **Follow up**
 
 Modify the program to resolve false sharing and improve performance. (Measure the performance)
+
+Solution code:
+
+```java
+public class FalseSharingDemo {
+
+    public final static class VolatileLongPadded {
+        public long q1, q2, q3, q4, q5, q6;
+        public volatile long value = 0L;
+        public long q11, q12, q13, q14, q15, q16;
+
+    }
+
+    public final static class VolatileLongUnPadded {
+        public volatile long value = 0L;
+    }
+
+}
+```
+
+Unit Test:
+
+```java
+import com.backstreetbrogrammer.ch02_orderingReadAndWrite.FalseSharingDemo.VolatileLongPadded;
+import com.backstreetbrogrammer.ch02_orderingReadAndWrite.FalseSharingDemo.VolatileLongUnPadded;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.time.Instant;
+
+public class FalseSharingDemoTest {
+
+    private VolatileLongPadded[] paddedLongs;
+    private VolatileLongUnPadded[] unPaddedLongs;
+
+    private final int numOfThreads = 4;
+    private final long iterations = 100_000_000L;
+
+    @BeforeEach
+    void setUp() {
+        paddedLongs = new VolatileLongPadded[]{
+                new VolatileLongPadded(),
+                new VolatileLongPadded(),
+                new VolatileLongPadded(),
+                new VolatileLongPadded()
+        };
+
+        unPaddedLongs = new VolatileLongUnPadded[]{
+                new VolatileLongUnPadded(),
+                new VolatileLongUnPadded(),
+                new VolatileLongUnPadded(),
+                new VolatileLongUnPadded()
+        };
+    }
+
+    @Test
+    @DisplayName("Demonstrate False Sharing")
+    void demonstrateFalseSharing() throws InterruptedException {
+        for (int i = 1; i <= numOfThreads; i++) {
+            final Thread[] threads = new Thread[i];
+            for (int j = 0; j < threads.length; j++) {
+                threads[j] = new Thread(createUnpaddedRunnable(j));
+            }
+            final Instant start = Instant.now();
+            for (final Thread t : threads) {
+                t.start();
+            }
+            for (final Thread t : threads) {
+                t.join();
+            }
+            final long timeElapsed = (Duration.between(start, Instant.now()).toMillis());
+            System.out.printf("[UNPADDED] No of Threads=[%d], total time taken: %d ms%n%n", i, timeElapsed);
+        }
+        System.out.println("------------------------------");
+    }
+
+    @Test
+    @DisplayName("Demonstrate fixing False Sharing by padding")
+    void demonstrateFixingFalseSharingByPadding() throws InterruptedException {
+        for (int i = 1; i <= numOfThreads; i++) {
+            final Thread[] threads = new Thread[i];
+            for (int j = 0; j < threads.length; j++) {
+                threads[j] = new Thread(createPaddedRunnable(j));
+            }
+            final Instant start = Instant.now();
+            for (final Thread t : threads) {
+                t.start();
+            }
+            for (final Thread t : threads) {
+                t.join();
+            }
+            final long timeElapsed = (Duration.between(start, Instant.now()).toMillis());
+            System.out.printf("[PADDED] No of Threads=[%d], total time taken: %d ms%n%n", i, timeElapsed);
+        }
+        System.out.println("------------------------------");
+    }
+
+    private Runnable createUnpaddedRunnable(final int k) {
+        return () -> {
+            long i = iterations + 1;
+            while (0 != --i) {
+                unPaddedLongs[k].value = i;
+            }
+        };
+    }
+
+    private Runnable createPaddedRunnable(final int k) {
+        return () -> {
+            long i = iterations + 1;
+            while (0 != --i) {
+                paddedLongs[k].value = i;
+            }
+        };
+    }
+
+}
+```
+
+Output:
+
+```
+[UNPADDED] No of Threads=[1], total time taken: 866 ms
+
+[UNPADDED] No of Threads=[2], total time taken: 2828 ms
+
+[UNPADDED] No of Threads=[3], total time taken: 4532 ms
+
+[UNPADDED] No of Threads=[4], total time taken: 5207 ms
+
+------------------------------
+[PADDED] No of Threads=[1], total time taken: 966 ms
+
+[PADDED] No of Threads=[2], total time taken: 1074 ms
+
+[PADDED] No of Threads=[3], total time taken: 1261 ms
+
+[PADDED] No of Threads=[4], total time taken: 1504 ms
+
+------------------------------
+```
+
+#### Singleton Pattern
+
+**Singleton Pattern** says that just "define a class that has only one instance and provides a global point of access to
+it". In other words, a class must ensure that only single instance should be created and single object can be used by
+all other classes.
+
+However, writing a Singleton pattern class in Java can be tricky in concurrent multicore environment.
+
+First implementation of Singleton pattern which will work fine **only when a single thread** is using it.
+
+```java
+public class SingletonSingleThreaded {
+
+    private static SingletonSingleThreaded instance;
+
+    private SingletonSingleThreaded() {
+    }
+
+    public static SingletonSingleThreaded getInstance() {
+        if (instance == null) {                        // read operation
+            instance = new SingletonSingleThreaded();  // write operation
+        }
+        return instance;
+    }
+
+}
+```
+
+As we can see that there would be race condition when multiple threads are doing read / write operation on the instance
+variable. So this implementation is NOT thread safe.
+
+Let's make the design thread safe using **synchronized**.
+
+```java
+public class SingletonSynchronized {
+
+    private static SingletonSynchronized instance;
+
+    private SingletonSynchronized() {
+    }
+
+    public static synchronized SingletonSynchronized getInstance() {
+        if (instance == null) {                        // read operation
+            instance = new SingletonSynchronized();    // write operation
+        }
+        return instance;
+    }
+
+}
+```
+
+Now our design is thread safe, but it is NOT performance efficient.
+
+In multicore CPU architecture, the multiple threads running on multiple cores have to wait even for **read** operation:
+`if (instance == null)`. However, in read-write lock paradigm, multiple threads can READ the critical section unless
+there is any other thread WRITING on that critical section.
+
+Using the above design - it will be affecting performance as multiple threads have to wait for the read operation
+everytime even though the instance has already been instantiated.
+
+Let's take the read operation outside the synchronized block to support multiple reads simultaneously by multiple
+threads. This is called **"Double Check Locking Singleton Pattern"**.
+
+```java
+public class SingletonDoubleCheckLocking {
+
+    private static SingletonDoubleCheckLocking instance;
+    private static final Object lock = new Object();
+
+    private SingletonDoubleCheckLocking() {
+    }
+
+    public static SingletonDoubleCheckLocking getInstance() {
+        if (instance != null) {                               // read operation - not synchronized
+            return instance;
+        }
+
+        synchronized (lock) {
+            if (instance == null) {                              // read operation - synchronized
+                instance = new SingletonDoubleCheckLocking();    // write operation - synchronized
+            }
+            return instance;
+        }
+    }
+
+}
+```
+
+In the first look, it seems perfect and solve our multiple read problem - however, this code is BUGGY!
+
+We have a **non-synchronized** READ supposed to return the value set by a **synchronized** WRITE. We do NOT have the
+guarantee that the READ will get the value set by the WRITE. For that, we have learned before that it needs a
+**"happens-before"** relationship, and we do not have it in the above code.
+
+In simpler words, **"Double Check Locking Singleton Pattern"** is buggy in multicore CPU architecture because there is
+no **"happens-before"** relationship between the READ returning the value and the WRITE that sets it.
+
+**How to fix it?**
+
+By creating a **"happens-before"** relationship between the READ returning the value and the WRITE that sets it.
+
+And we have learnt it that we can use **volatile** or **synchronized** block to do it.
+
+```java
+public class SingletonDoubleCheckLockingFixed {
+
+    private static volatile SingletonDoubleCheckLockingFixed instance;
+    private static final Object lock = new Object();
+
+    private SingletonDoubleCheckLockingFixed() {
+    }
+
+    public static SingletonDoubleCheckLockingFixed getInstance() {
+        if (instance != null) {                               // read operation - protected by volatile
+            return instance;
+        }
+
+        synchronized (lock) {
+            if (instance == null) {                                   // read operation - synchronized
+                instance = new SingletonDoubleCheckLockingFixed();    // write operation - synchronized
+            }
+            return instance;
+        }
+    }
+
+}
+```
+
+Marking the `instance` as **volatile** will create the **"happens-before"** relationship between the READ returning the
+value and the WRITE that sets it.
+
+Although we have fixed the **"Double Check Locking Singleton Pattern"** but again we are at the same performance issues
+which we encountered using just **synchronized** version of the code.
+
+The MOST correct, clean and concise implementation of Singleton design pattern is to use **ENUM**.
+
+```java
+public enum Singleton {
+    INSTANCE
+}
+```
+
+The same way it is used all over JDK APIs, for ex:
+
+```java
+enum NaturalOrderComparator implements Comparator<Comparable<Object>> {
+    INSTANCE;
+
+    @Override
+    public int compare(Comparable<Object> c1, Comparable<Object> c2) {
+        return c1.compareTo(c2);
+    }
+
+    @Override
+    public Comparator<Comparable<Object>> reversed() {
+        return Comparator.reverseOrder();
+    }
+}
+```
 
