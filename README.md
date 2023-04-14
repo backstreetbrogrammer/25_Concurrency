@@ -11,6 +11,8 @@ Tools used:
 
 ## Table of contents
 
+### Module 1 - Concurrency Basics
+
 1. Introduction to Concurrency
     - Threading fundamentals
     - Thread coordination
@@ -18,15 +20,19 @@ Tools used:
     - Synchronization and Visibility
     - Java Memory Model
     - False Sharing
-    - Singleton pattern
-3. Executor Pattern, Futures and Callables
+    - Singleton design pattern
+
+### Module 2 - Advanced Concurrency
+
+3. Executor Pattern, Callable and Future
 4. Advanced Locking and Semaphores
 5. Using Barriers and Latches
 6. CAS operation and Atomic classes
 7. Concurrent Collections
-8. Asynchronous Programming Using CompletionStage
 
 ---
+
+## Module 1 - Concurrency Basics
 
 ### Chapter 01. Introduction to Concurrency
 
@@ -1266,7 +1272,16 @@ Output:
 ------------------------------
 ```
 
-#### Singleton Pattern
+Thus, to summarize how to write correct concurrent code in multicore CPU environment:
+
+- Check for **race conditions**
+    - multiple threads are reading / writing a given field
+    - it can only occur on class member fields (not local member variables or method parameters)
+- Check for **happens-before** relationship
+    - if more than one field or lines are part of critical section = use **synchronization**
+    - if only one field needs to be visible (with no compound actions) = use **volatile**
+
+#### Interview Problem 7 (JP Morgan Chase, Merrill Lynch, Goldman Sachs): Singleton Design Pattern
 
 **Singleton Pattern** says that just "define a class that has only one instance and provides a global point of access to
 it". In other words, a class must ensure that only single instance should be created and single object can be used by
@@ -1408,6 +1423,9 @@ public enum Singleton {
 }
 ```
 
+However, note that we can't use this approach if our singleton must extend a superclass other than `java.lang.Enum`,
+though we can declare an `enum` to implement interfaces.
+
 The same way it is used all over JDK APIs, for ex:
 
 ```java
@@ -1425,4 +1443,141 @@ enum NaturalOrderComparator implements Comparator<Comparable<Object>> {
     }
 }
 ```
+
+And called in `Comparator` interface as **static** method:
+
+```
+public static <T extends Comparable<? super T>> Comparator<T> naturalOrder() {
+        return (Comparator<T>) Comparators.NaturalOrderComparator.INSTANCE;
+}
+```
+
+---
+
+## Module 2 - Advanced Concurrency
+
+### Chapter 03. Executor Pattern, Callable and Future
+
+#### Executor Pattern
+
+The naive way to create a thread and start is by using `Runnable` interface.
+
+Code snippet:
+
+```
+final Runnable task = () -> System.out.println("Hello students!");
+final Thread thread = new Thread(task);
+thread.start();
+```
+
+- the thread task is wrapped in an instance of Runnable `run()` method
+- Runnable instance is passed to a new instance of Thread in constructor
+- Thread is executed by calling `start()`
+
+Downsides of this approach:
+
+- a thread is created on demand by the user - means that any user can create any number of threads in the application
+- **problem**: most of the operating systems have a limit to the maximum number of threads which can be created
+- once the task is done, i.e. finish the `run()` method => the thread dies
+- **problem**: a thread is an expensive resource, and it will impact system performance if too many threads are created
+  and finished-terminated at a quick rate
+
+The **Executor Pattern** aims to fix the above-mentioned issues:
+
+- by creating pools of ready-to-use threads
+- passing task to this pool of threads that will execute it
+
+```java
+public interface Executor {
+    void execute(Runnable task);
+}
+```
+
+A pool of thread is an instance of the `Executor` interface.
+
+```java
+public interface ExecutorService extends Executor {
+    // 12 more methods
+}
+```
+
+`ExecutorService` is an extension of `Executor` and has got around 12 more methods. The implementations of both
+interfaces are the same. The factory class `Executors` proposes around 20 more methods to **create executors**.
+
+Code snippet to create a single-thread pool:
+
+```
+final ExecutorService executor = Executors.newSingleThreadExecutor();
+final Runnable task = () -> System.out.println("Hello students!");
+
+// Executor pattern
+executor.execute(task);
+
+// Runnable pattern
+new Thread(task).start();
+```
+
+The thread in this pool will be kept alive as long as this pool is alive. It means that the single thread will execute
+the submitted task => once the task finishes, the thread will return to the pool and wait for new task to be submitted
+for execution.
+
+As compared to Runnable pattern, Executor pattern does NOT create a new thread. However, the behavior is same: both
+calls return immediately and task is executed in **another** thread.
+
+We can **shut down** an `ExecutorService` which we will discuss in details later.
+
+We can also create executors with multiple threads in the pool:
+
+```
+// fixed thread pool size of 4 threads
+final ExecutorService multipleThreadsExecutor = Executors.newFixedThreadPoolExecutor(4);
+
+// cached thread pool where size is dependent on number of system cpu cores available 
+// creates new threads as needed, but will reuse previously constructed threads when they are available
+final ExecutorService cachedExecutor = Executors.newCachedThreadPool();
+```
+
+**Waiting queue**
+
+Suppose we have a code snippet:
+
+```
+final Executor executor = Executors.newSingleThreadExecutor();
+
+final Runnable task1 = () -> someReallyLongProcess();
+final Runnable task2 = () -> anotherReallyLongProcess();
+
+executor.execute(task1);
+executor.execute(task2);
+```
+
+When we run this code, **task2** has to wait for **task1** to complete. The executor has a **waiting queue** to handle
+this:
+
+- A task is added to the waiting queue when **no** thread is available
+- The tasks are executed in the **order** of their submission
+
+**Can we know if a task is done or not?**
+
+**Answer is no** - we don't have any API method in **ExecutorService** to check that. However, we can have a print
+statement at the end of our Runnable task (`run()` method) to indicate that task has completed.
+
+**Can we cancel the execution of a task?**
+
+**Answer is yes** - BUT only if the task has NOT started yet and still in the waiting queue.
+
+To summarize the advantages of using **Executor Pattern**:
+
+- building an executor is **more performance efficient** than creating threads on demand
+- can pass instances of Runnable to an executor - even if there are no threads available in the pool, executor has a
+  waiting queue to **handle more tasks** than number of threads in the pool
+- a task can be cancelled by removing it from the waiting queue
+
+#### Callable
+
+
+
+
+
+
 
