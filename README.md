@@ -1433,7 +1433,7 @@ enum NaturalOrderComparator implements Comparator<Comparable<Object>> {
     INSTANCE;
 
     @Override
-    public int compare(Comparable<Object> c1, Comparable<Object> c2) {
+    public int compare(final Comparable<Object> c1, final Comparable<Object> c2) {
         return c1.compareTo(c2);
     }
 
@@ -1537,6 +1537,13 @@ final ExecutorService multipleThreadsExecutor = Executors.newFixedThreadPoolExec
 final ExecutorService cachedExecutor = Executors.newCachedThreadPool();
 ```
 
+More about **cached** thread pool:
+
+- create threads **on demand** but will reuse previously constructed threads when they are available
+- keeps **unused** threads for **60 seconds** by default, then terminates them
+
+Another Executor Service implementation available in Java is `ScheduledExecutorService`:
+
 **Waiting queue**
 
 Suppose we have a code snippet:
@@ -1544,8 +1551,8 @@ Suppose we have a code snippet:
 ```
 final Executor executor = Executors.newSingleThreadExecutor();
 
-final Runnable task1 = () -> someReallyLongProcess();
-final Runnable task2 = () -> anotherReallyLongProcess();
+final Runnable task1 = () -> someLongProcess();
+final Runnable task2 = () -> anotherLongProcess();
 
 executor.execute(task1);
 executor.execute(task2);
@@ -1575,9 +1582,172 @@ To summarize the advantages of using **Executor Pattern**:
 
 #### Callable
 
+There are some caveats in `Runnable` interface:
 
+```java
 
+@FunctionalInterface
+public interface Runnable {
+    void run();
+}
+```
 
+There is no way we can know if a task is done or not.
+
+- No object can be returned
+- No exception can be raised
+
+We need to know if there was any exception raised by the task and also we may need flexibility to get a value returned
+from the task.
+
+In Java 1.5 release, new `Callable` interface was introduced:
+
+```java
+
+@FunctionalInterface
+public interface Callable<V> {
+    V call() throws Exception;
+}
+```
+
+As seen, `Callable` can return `V` object and also throws `Exception` (if any) to the calling thread.
+
+We can use it via `submit()` method in `ExecutorService` which returns a `Future` object:
+
+```
+<T> Future<T> submit(Callable<T> task);
+```
+
+Sample code snippet:
+
+```
+// In the main thread
+final ExecutorService executor = Executors.newFixedThreadPoolExecutor(4);
+final Callable<String> task = () -> someTaskWhichReturnsString();
+
+final Future<String> future = executor.submit(task); // asynchronous
+// optionally, main thread can do some other task here
+// ...
+final String result = future.get(); // get() call is blocking until the returned String is available 
+```
+
+More about `Future.get()` method:
+
+- blocking until the returned value `V` is available
+- can raise 2 exceptions:
+    - if the thread from the thread pool in `ExecutorService` is interrupted => throws `InterruptedException`
+    - if the submitted task itself throws an exception => it is wrapped in an `ExecutionException` and re-thrown
+
+We can use overloaded `Future.get()` methods which allows to pass a **timeout** as argument to avoid indefinitely
+blocking calls. However, if the value `V` is still not available after the given timeout, it will throw
+`TimeoutException`.
+
+Other methods in `Future`:
+
+- `Future.isDone()` tells us if the executor has finished processing the task. If the task is complete, it will return
+  true;otherwise, it returns false.
+- `Future.cancel(boolean)` can be used to tell the executor to stop the operation and interrupt its underlying thread.
+
+#### Interview Problem 8 (Barclays): Implement GCD algorithm using Futures
+
+Greatest Common Divisor (GCD) of two or more integers is the largest integer that divides each of the integers such that
+their remainder is zero.
+
+Example:
+
+- GCD of 20, 30 = 10  (10 is the largest number which divides 20 and 30 with remainder as 0)
+- GCD of 42, 120, 285 = 3  (3 is the largest number which divides 42, 120 and 285 with remainder as 0)
+
+Pseudo Code of the Euclidean Algorithm to find GCD of 2 numbers:
+
+- Step 1:  Let `a, b` be the two numbers
+- Step 2:  `a mod b = R`
+- Step 3:  Let `a = b` and `b = R`
+- Step 4:  Repeat Steps 2 and 3 until `a mod b` is greater than `0`
+- Step 5:  `GCD = a`
+- Step 6: Finish
+
+Write the GCD algorithm in Java using Futures.
+
+**Solution**:
+
+Let's implement the GCD algorithm as given in the pseudocode:
+
+```
+    // Euclidean Algorithm
+    private static int gcd(final int a, final int b) {
+        if (b == 0)
+            return a;
+
+        return gcd(b, a % b);
+    }
+```
+
+Complete code using Futures:
+
+```java
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+public class GCDCalculator {
+
+    private final ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    public Future<Integer> calculate(final int a, final int b) {
+        return executor.submit(() -> {
+            Thread.sleep(1000L);
+            return gcd(a, b);
+        });
+    }
+
+    // Euclidean Algorithm
+    private static int gcd(final int a, final int b) {
+        if (b == 0)
+            return a;
+
+        return gcd(b, a % b);
+    }
+
+    private void shutdown() {
+        executor.shutdown();
+    }
+
+    public static void main(final String[] args) throws InterruptedException, ExecutionException {
+        final GCDCalculator gcdCalculator = new GCDCalculator();
+
+        final Future<Integer> future1 = gcdCalculator.calculate(20, 30);
+        final Future<Integer> future2 = gcdCalculator.calculate(15, 35);
+
+        while (!(future1.isDone() && future2.isDone())) {
+            System.out.printf("future1 is %s and future2 is %s%n",
+                              future1.isDone() ? "done" : "not done",
+                              future2.isDone() ? "done" : "not done");
+            Thread.sleep(300L);
+        }
+
+        final Integer result1 = future1.get();
+        final Integer result2 = future2.get();
+
+        System.out.printf("GCD of (20,30) is %d%n", result1);
+        System.out.printf("GCD of (15,35) is %d%n", result2);
+
+        gcdCalculator.shutdown();
+    }
+}
+```
+
+Output:
+
+```
+future1 is not done and future2 is not done
+future1 is not done and future2 is not done
+future1 is not done and future2 is not done
+future1 is not done and future2 is not done
+GCD of (20,30) is 10
+GCD of (15,35) is 5
+```
 
 
 
