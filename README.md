@@ -1497,7 +1497,7 @@ A pool of thread is an instance of the `Executor` interface.
 
 ```java
 public interface ExecutorService extends Executor {
-    // 12 more methods
+    // 11 more methods
 }
 ```
 
@@ -1524,8 +1524,6 @@ for execution.
 As compared to Runnable pattern, Executor pattern does NOT create a new thread. However, the behavior is same: both
 calls return immediately and task is executed in **another** thread.
 
-We can **shut down** an `ExecutorService` which we will discuss in details later.
-
 We can also create executors with multiple threads in the pool:
 
 ```
@@ -1541,8 +1539,6 @@ More about **cached** thread pool:
 
 - create threads **on demand** but will reuse previously constructed threads when they are available
 - keeps **unused** threads for **60 seconds** by default, then terminates them
-
-Another Executor Service implementation available in Java is `ScheduledExecutorService`:
 
 **Waiting queue**
 
@@ -1580,7 +1576,7 @@ To summarize the advantages of using **Executor Pattern**:
   waiting queue to **handle more tasks** than number of threads in the pool
 - a task can be cancelled by removing it from the waiting queue
 
-#### Callable
+#### Callable and Future
 
 There are some caveats in `Runnable` interface:
 
@@ -1644,11 +1640,85 @@ blocking calls. However, if the value `V` is still not available after the given
 
 Other methods in `Future`:
 
-- `Future.isDone()` tells us if the executor has finished processing the task. If the task is complete, it will return
-  true;otherwise, it returns false.
-- `Future.cancel(boolean)` can be used to tell the executor to stop the operation and interrupt its underlying thread.
+- **isDone()**: tells us if the executor has finished processing the task. If the task is complete, it will return true;
+  otherwise, it returns false.
+- **cancel(boolean)**: can be used to tell the executor to stop the operation and interrupt its underlying thread.
+- **isCancelled()**: tells us if the task is cancelled or not, returning a boolean.
 
-#### Interview Problem 8 (Barclays): Implement GCD algorithm using Futures
+Now as we have learnt basics of `Callable` and `Future`, let's explore more methods available in `Executor`.
+
+ExecutorService can execute both `Runnable` and `Callable` tasks.
+
+Example code snippet:
+
+```
+final Runnable runnableTask = () -> {
+    try {
+        TimeUnit.MILLISECONDS.sleep(300L);
+        System.out.println("Hello students from Runnable!");
+    } catch (final InterruptedException e) {
+        e.printStackTrace();
+    }
+};
+
+final Callable<String> callableTask = () -> {
+    TimeUnit.MILLISECONDS.sleep(300L);
+    return "Hello students from Callable!";
+};
+
+final List<Callable<String>> callableTasks = List.of(callableTask, callableTask, callableTask);
+final ExecutorService executorService = Executors.newFixedThreadPoolExecutor(2);
+```
+
+We can call following methods:
+
+- **execute()**: method is `void` and doesn't give any possibility to get the result of a task's execution or to check
+  the task's status (if it is running):
+    - `executorService.execute(runnableTask);`
+- **submit()**: submits a `Callable` or a `Runnable` task to an `ExecutorService` and returns a result of type `Future`:
+    - `Future<String> future = executorService.submit(callableTask);`
+    - `Future<?> future = executorService.submit(runnableTask);` // Future's `get()` method will return `null` upon
+      successful completion
+- **invokeAny()**: assigns a collection of tasks to an `ExecutorService`, causing each to run, and returns the result of
+  a successful execution of **one** task (if there was a successful execution)
+    - `String result = executorService.invokeAny(callableTasks);`
+- **invokeAll()**: assigns a collection of tasks to an `ExecutorService`, causing each to run, and returns the result of
+  **all** task executions in the form of a list of objects of type `Future`
+    - `List<Future<String>> futures = executorService.invokeAll(callableTasks);`
+
+**Shutting Down an ExecutorService**
+
+The `ExecutorService` will not be automatically destroyed when there is no task to process. It will stay alive and wait
+for new work to do. So, the application or main thread will not terminate as the threads in the executor's thread pool
+are **non-daemon** which will keep the application alive.
+
+To properly shut down an `ExecutorService`, we have the `shutdown()` and `shutdownNow()` methods.
+
+- **shutdown()**: method doesn't cause immediate destruction of the `ExecutorService`. It will make the
+  `ExecutorService` stop accepting new tasks and shut down after all running threads finish their current work.
+    - `executorService.shutdown();`
+- **shutdownNow()**: method tries to destroy the `ExecutorService` immediately, but it doesn't guarantee that all the
+  running threads will be stopped at the same time.
+    - `List<Runnable> notExecutedTasks = executorService.shutDownNow();` // This method returns a list of tasks that are
+      waiting to be processed. It is up to the developer to decide what to do with these tasks.
+
+**Oracle** recommended way to shut down the `ExecutorService` using `awaitTermination()` method:
+
+```
+executorService.shutdown();
+try {
+    if (!executorService.awaitTermination(900L, TimeUnit.MILLISECONDS)) {
+        executorService.shutdownNow();
+    } 
+} catch (final InterruptedException e) {
+    executorService.shutdownNow();
+}
+```
+
+`ExecutorService` will first stop taking new tasks and then wait up to a specified period of time (900 ms) for all tasks
+to be completed. If that time expires, the execution is stopped immediately.
+
+#### Interview Problem 8 (Barclays): Implement GCD algorithm using Executor Service and Futures
 
 Greatest Common Divisor (GCD) of two or more integers is the largest integer that divides each of the integers such that
 their remainder is zero.
@@ -1667,7 +1737,7 @@ Pseudo Code of the Euclidean Algorithm to find GCD of 2 numbers:
 - Step 5:  `GCD = a`
 - Step 6: Finish
 
-Write the GCD algorithm in Java using Futures.
+Write the GCD algorithm in Java using Executor Service and Futures.
 
 **Solution**:
 
@@ -1749,5 +1819,39 @@ GCD of (20,30) is 10
 GCD of (15,35) is 5
 ```
 
+**ScheduledExecutorService**
 
+The `ScheduledExecutorService` runs tasks after some predefined delay and/or periodically. We can create a new
+`ScheduledExecutorService` instance using the `Executors` factory method:
+
+```
+ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+```
+
+Methods available:
+
+- **schedule()**: schedule a single task's execution after a fixed delay; tasks can be `Callable` or `Runnable`
+    - `Future<String> resultFuture = executorService.schedule(callableTask, 1, TimeUnit.SECONDS);` // delays for one
+      second before executing **callableTask**
+- **scheduleAtFixedRate()**: schedule a single task's execution after a fixed delay and then keep on running at a fixed
+  rate. Following block of code will run a task after an initial delay of 100 ms and after that, it will run the same
+  task every 450 ms:
+    - `executorService.scheduleAtFixedRate(runnableTask, 100L, 450L, TimeUnit.MILLISECONDS);`
+- **scheduleWithFixedDelay()**: if it is necessary to have a fixed length delay between iterations of the task.
+  Following code will guarantee a 150 ms pause between the end of the current execution and the start of another one:
+    - `executorService.scheduleWithFixedDelay(task, 100, 150, TimeUnit.MILLISECONDS);`
+
+**Few common pitfalls of ExecutorService**
+
+- Keeping an unused `ExecutorService` alive: We need to be careful and shut down an ExecutorService, otherwise the
+  application will keep on running even if it has completed.
+- Wrong thread-pool capacity while using fixed length thread pool: It is very important to determine how many threads
+  the application will need to run tasks efficiently. A too-large thread pool will cause unnecessary overhead just to
+  create threads that will mostly be in the waiting mode. Too few can make an application seem unresponsive because of
+  long waiting periods for tasks in the queue.
+- Calling a Future‘s `get()` method after task cancellation: Attempting to get the result of an already canceled task
+  triggers a `CancellationException`.
+- Unexpectedly long blocking with Future‘s `get()` method: We should use timeouts to avoid unexpected waits.
+
+---
 
