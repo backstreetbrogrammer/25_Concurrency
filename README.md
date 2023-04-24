@@ -25,10 +25,11 @@ Tools used:
 ### Module 2 - Advanced Concurrency
 
 3. Executor Pattern, Callable and Future
-4. Advanced Locking and Semaphores
-5. Using Barriers and Latches
-6. CAS operation and Atomic classes
-7. Concurrent Collections
+4. Fork/Join Framework
+5. Advanced Locking and Semaphores
+6. Using Barriers and Latches
+7. CAS operation and Atomic classes
+8. Concurrent Collections
 
 ---
 
@@ -138,8 +139,8 @@ public class SingletonDemo {
     }
 
     public static synchronized SingletonDemo getInstance() {
-        if (instance == null) {
-            instance = new SingletonDemo();
+        if (instance == null) {              // read
+            instance = new SingletonDemo();  // write
         }
         return instance;
     }
@@ -178,6 +179,28 @@ public SingletonDemo getInstance() {
    }
 }
 ```
+
+Another solution is that somehow we can segregate read / write logic so that one thread writes the object synchronously
+and after that, all the subsequent reads do not require any locking or synchronization.
+
+```java
+public class SingletonDemo {
+
+    // write once when the class is initialized - always thread safe 
+    private static SingletonDemo instance = new SingletonDemo();
+
+    private SingletonDemo() {
+    }
+
+    public static SingletonDemo getInstance() {
+        return instance; // no lock required for reads by multiple threads
+    }
+
+}
+```
+
+When the class loader loads the `SingletonDemo` class, **instance** object is created at that time. Thus, further
+subsequent calls to `getInstance()` method during application run will always be thread safe and don't require any lock.
 
 **Reentrant Lock**
 
@@ -321,6 +344,39 @@ Counter Value = 1000000
 Counter Value = 1000000
 Counter Value = 1000000
 ```
+
+However, still there is a subtle bug in the solution, and it **may** fail in multicore multithreaded environment.
+Besides, synchronizing the `increment()` method, we also need to synchronize the `getCounter()` method. Because we need
+to guarantee that every **read** is synchronized with latest **writes**, i.e. if any **read** of `counter` variable is
+done - it should always happen after the latest **write** by a thread on the `counter` variable. This is called
+**"happens-before"** relationship which we will learn later in next chapters.
+
+Complete correct solution:
+
+```java
+public class Counter {
+
+    private long counter;
+
+    public Counter(final long counter) {
+        this.counter = counter;
+    }
+
+    public synchronized long getCounter() { // read
+        return counter;
+    }
+
+    public synchronized void increment() { // write
+        counter += 1L;
+    }
+
+}
+```
+
+Also in advanced section of this course, we will learn to avoid explicit synchronization and just **atomic** classes to
+achieve thread safety. For ex, in the above solution code - if we just make `counter` variable as `AtomicLong`, we do
+not need to mark `getCounter()` and `increment()` as synchronized and can use special methods of `AtomicLong` to achieve
+thread safety.
 
 #### Interview Problem 3 (Goldman Sachs): Demonstrate deadlock issue and fix the code
 
@@ -513,10 +569,11 @@ public class StopThreadUsingBooleanDemo implements Runnable {
 Now once the thread is created and started - we can call `stop()` method to stop the thread.
 
 ```
-final Thread t1 = new Thread(new StopThreadUsingBooleanDemo());
+final var stopThreadDemoObject = new StopThreadUsingBooleanDemo();
+final Thread t1 = new Thread(stopThreadDemoObject);
 t1.start();
 ...
-t1.stop(); // this will stop the thread t1
+stopThreadDemoObject.stop(); // this will stop the thread t1
 ```
 
 - Call `interrupt()` on a running thread
@@ -742,9 +799,9 @@ indefinitely and never be able to produce or write anything to buffer.
 
 **Solution**:
 
-We need a mechanism to somehow "park" this consumer thread when the buffer is empty and release the lock. Then the
-producer thread can acquire this lock and write to the buffer. When the "parked" consumer thread is woken up again - the
-buffer will not be empty this time, and it can consume the item.
+We need a mechanism to somehow **"park"** this consumer thread when the buffer is empty and release the lock. Then the
+producer thread can acquire this lock and write to the buffer. When the **"parked"** consumer thread is woken up again -
+the buffer will not be empty this time, and it can consume the item.
 
 This is the `wait()` / `notify()` pattern.
 
@@ -949,6 +1006,9 @@ Done producing: Producer1
 Data in the buffer: 5
 ```
 
+Here we have used the classic `wait()`/`notify()` methods but in the subsequent chapters, we will see how to use
+advanced locking, condition variables or semaphores to get the same result.
+
 #### Thread states
 
 A thread has a state - for example, it can be running or not. We can get the thread state by calling `getState()`
@@ -1060,7 +1120,7 @@ Example code:
 int counter;
 
 void increment() {
-    counter++;
+    counter = counter + 1;
 }
 
 void print() {
@@ -1097,7 +1157,7 @@ Similarly, if we use **volatile** keyword, **"happens-before"**  relationship is
 volatile int counter;
 
 void increment() {
-    counter++;
+    counter = counter + 1;
 }
 
 void print() {
@@ -1855,3 +1915,44 @@ Methods available:
 
 ---
 
+### Chapter 04. Fork/Join Framework
+
+The Fork/Join Framework was designed to recursively split a parallelizable task into smaller tasks and then combine the
+results of each subtask to produce the overall result. It provides tools to help speed up parallel processing by
+attempting to use all available processor cores. It accomplishes this through a divide and conquer approach.
+
+Pseudo code:
+
+```
+if (task is small enough or no longer divisible) {
+    compute task sequentially
+} else {
+    split task in 2 subtasks
+    call this method recursively possibly further splitting each subtask
+    wait for the completion of all subtasks
+    combine the results of each subtask
+}
+```
+
+In practice, this means that the framework first **"forks"** recursively breaking the task into smaller independent
+subtasks until they are simple enough to run asynchronously.
+
+After that, the **"join"** part begins. The results of all subtasks are recursively joined into a single result. In the
+case of a task that returns `void`, the program simply waits until every subtask runs.
+
+To provide effective parallel execution, the fork/join framework uses a pool of threads called the `ForkJoinPool`. This
+pool manages worker threads of type `ForkJoinWorkerThread`.
+
+**ExecutorService vs Fork/Join**
+
+After the release of Java 7, many developers decided to replace the `ExecutorService` framework with the **Fork/Join
+framework**.
+
+However, despite the simplicity and frequent performance gains associated with fork/join, it reduces developer control
+over concurrent execution.
+
+`ExecutorService` gives the developer the ability to control the number of generated threads and the granularity of
+tasks that should be run by separate threads. The best use case for `ExecutorService` is the processing of
+**independent** tasks, such as transactions or requests according to the scheme **"one thread for one task"**.
+
+In contrast, **fork/join** was designed to speed up work that can be broken into smaller pieces recursively.

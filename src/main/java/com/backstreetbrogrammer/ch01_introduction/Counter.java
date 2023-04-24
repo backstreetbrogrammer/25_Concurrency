@@ -8,11 +8,11 @@ public class Counter {
         this.counter = counter;
     }
 
-    public long getCounter() {
+    public synchronized long getCounter() { // read
         return counter;
     }
 
-    public synchronized void increment() {
+    public synchronized void increment() { // write
         counter += 1L;
     }
 
