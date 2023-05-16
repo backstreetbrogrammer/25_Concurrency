@@ -1479,7 +1479,9 @@ The MOST correct, clean and concise implementation of Singleton design pattern i
 
 ```java
 public enum Singleton {
-    INSTANCE
+    INSTANCE;
+    
+    // other useful methods
 }
 ```
 
