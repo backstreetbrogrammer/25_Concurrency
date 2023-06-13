@@ -1,6 +1,6 @@
-# Concurrency
+# Concurrency Basics
 
-> This is a tutorials course covering concurrency in Java.
+> This is a tutorials course covering concurrency basics in Java.
 
 Tools used:
 
@@ -11,29 +11,16 @@ Tools used:
 
 ## Table of contents
 
-### Module 1 - Concurrency Basics
-
-1. Introduction to Concurrency
-    - Threading fundamentals
-    - Thread coordination
-2. Ordering read and write operations
-    - Synchronization and Visibility
-    - Java Memory Model
-    - False Sharing
-    - Singleton design pattern
-
-### Module 2 - Advanced Concurrency
-
-3. Executor Pattern, Callable and Future
-4. Fork/Join Framework
-5. Advanced Locking and Semaphores
-6. Using Barriers and Latches
-7. CAS operation and Atomic classes
-8. Concurrent Collections
+1. [Introduction to Concurrency](https://github.com/backstreetbrogrammer/25_Concurrency#chapter-01-introduction-to-concurrency)
+    - [Threading fundamentals](https://github.com/backstreetbrogrammer/25_Concurrency#threading-fundamentals)
+    - [Thread coordination](https://github.com/backstreetbrogrammer/25_Concurrency#thread-coordination)
+2. [Ordering read and write operations](https://github.com/backstreetbrogrammer/25_Concurrency#chapter-02-ordering-read-and-write-operations)
+    - [Synchronization and Visibility](https://github.com/backstreetbrogrammer/25_Concurrency#synchronization-and-visibility)
+    - [Java Memory Model](https://github.com/backstreetbrogrammer/25_Concurrency#java-memory-model)
+    - [False Sharing](https://github.com/backstreetbrogrammer/25_Concurrency#false-sharing)
+    - [Singleton design pattern](https://github.com/backstreetbrogrammer/25_Concurrency#interview-problem-7-jp-morgan-chase-merrill-lynch-goldman-sachs-singleton-design-pattern)
 
 ---
-
-## Module 1 - Concurrency Basics
 
 ### Chapter 01. Introduction to Concurrency
 
@@ -1480,7 +1467,7 @@ The MOST correct, clean and concise implementation of Singleton design pattern i
 ```java
 public enum Singleton {
     INSTANCE;
-    
+
     // other useful methods
 }
 ```
