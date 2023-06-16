@@ -800,13 +800,14 @@ The `wait()`, `notify()` and `notifyAll()` methods are defined in `java.lang.Obj
 a given object => normally the object lock being used. The thread executing the invocation should hold that object key.
 Thus, in other words, these methods cannot be invoked outside a synchronized block.
 
-Calling `wait()` releases the key (object lock) held by this thread and puts the thread in **WAIT** state. The only way
-to release a thread from a **WAIT** state is to **notify** it.
+Calling `wait()` releases the key (object lock) held by this thread and puts the thread in **WAIT** forkPosition. The
+only way to release a thread from a **WAIT** forkPosition is to **notify** it.
 
-Calling `notify()` release a thread in **WAIT** state and puts it in **RUNNABLE** state. This is the only way to release
-a waiting thread. The released thread is chosen randomly. For `notifyAll()`, **all** the threads are moved from **WAIT**
-state to **RUNNABLE** state, however only one thread can acquire the lock again. However, the woken threads can do other
-task rather than waiting for the object again.
+Calling `notify()` release a thread in **WAIT** forkPosition and puts it in **RUNNABLE** forkPosition. This is the only
+way to release a waiting thread. The released thread is chosen randomly. For `notifyAll()`, **all** the threads are
+moved from **WAIT**
+forkPosition to **RUNNABLE** forkPosition, however only one thread can acquire the lock again. However, the woken
+threads can do other task rather than waiting for the object again.
 
 **Producer**:
 
@@ -1002,13 +1003,14 @@ advanced locking, condition variables or semaphores to get the same result.
 
 #### Thread states
 
-A thread has a state - for example, it can be running or not. We can get the thread state by calling `getState()`
+A thread has a forkPosition - for example, it can be running or not. We can get the thread forkPosition by
+calling `getState()`
 method on thread.
 
 ```
 final Thread t1 = new Thread();
 ...
-Thread.State state = t1.getState();
+Thread.State forkPosition = t1.getState();
 ```
 
 Java API already defines **enum** `Thread.State` as
@@ -1016,22 +1018,23 @@ follows:  `public static enum Thread.State extends Enum<Thread. State>`
 
 A thread can be in one of the following states:
 
-- **NEW**: A thread that has not yet started is in this state.
-- **RUNNABLE**: A thread executing in the Java virtual machine is in this state.
-- **BLOCKED**: A thread that is blocked waiting for a monitor lock is in this state.
-- **WAITING**: A thread that is waiting indefinitely for another thread to perform a particular action is in this state.
+- **NEW**: A thread that has not yet started is in this forkPosition.
+- **RUNNABLE**: A thread executing in the Java virtual machine is in this forkPosition.
+- **BLOCKED**: A thread that is blocked waiting for a monitor lock is in this forkPosition.
+- **WAITING**: A thread that is waiting indefinitely for another thread to perform a particular action is in this
+  forkPosition.
 - **TIMED_WAITING**: A thread that is waiting for another thread to perform an action for up to a specified waiting time
-  is in this state.
-- **TERMINATED**: A thread that has exited is in this state.
+  is in this forkPosition.
+- **TERMINATED**: A thread that has exited is in this forkPosition.
 
 ![Thread States](ThreadStates.PNG)
 
-A thread can be in only one state at a given point in time. These states are virtual machine states which do not reflect
-any operating system thread states.
+A thread can be in only one forkPosition at a given point in time. These states are virtual machine states which do not
+reflect any operating system thread states.
 
 NOTE: If a thread is not running, can it be given hand by the thread scheduler ?
 
-Answer is **no** => thread scheduler will only schedule threads which are in **RUNNABLE** state.
+Answer is **no** => thread scheduler will only schedule threads which are in **RUNNABLE** forkPosition.
 
 ---
 
@@ -1523,5 +1526,307 @@ public static <T extends Comparable<? super T>> Comparator<T> naturalOrder() {
 1) Thread should not be blocked indefinitely => thus use `tryLock()` method of `Lock` interface
 2) Ensure that each thread acquires the locks in the **same order**
 3) Livelock can be handled with the above methods and some randomness => threads retry acquiring the locks at **random**
-   intervals 
+   intervals
+
+**Solution**
+
+`Fork` class: here we are using `tryLock(`) to avoid deadlocks
+
+```java
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Fork {
+
+    private final int id;
+    private final Lock lock;
+
+    public Fork(final int id) {
+        this.id = id;
+        this.lock = new ReentrantLock();
+    }
+
+    public boolean pickUp(final Philosopher philosopher, final ForkPosition forkPosition) throws InterruptedException {
+        if (lock.tryLock(10, TimeUnit.MILLISECONDS)) {
+            System.out.printf("%s picked up %s %s%n", philosopher, forkPosition.toString(), this);
+            return true;
+        }
+        return false;
+    }
+
+    public void putDown(final Philosopher philosopher, final ForkPosition forkPosition) {
+        lock.unlock();
+        System.out.printf("%s puts down %s %s%n", philosopher, forkPosition.toString(), this);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Fork %d", id);
+    }
+}
+```
+
+Enum class for fork positions:
+
+```java
+public enum ForkPosition {
+    LEFT, RIGHT;
+}
+```
+
+`Philosopher` class implemented as a thread:
+
+- a philosopher acquires the forks in the **same order**: first **left** fork and then **right** fork.
+- fork is released in the **same order**: first **right** fork and then **left** fork.
+
+```java
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+
+public class Philosopher implements Runnable {
+    private final int id;
+    private final Fork leftFork;
+    private final Fork rightFork;
+
+    private volatile boolean full;
+    private int eatingCounter;
+
+    public Philosopher(final int id, final Fork leftFork, final Fork rightFork) {
+        this.id = id;
+        this.leftFork = leftFork;
+        this.rightFork = rightFork;
+    }
+
+    @Override
+    public void run() {
+        try {
+            // after eating a lot for random 1000 ms (1 seconds), we will terminate the given thread
+            while (!full) {
+                think();
+                if (leftFork.pickUp(this, ForkPosition.LEFT)) {
+                    if (rightFork.pickUp(this, ForkPosition.RIGHT)) {
+                        eat();
+                        rightFork.putDown(this, ForkPosition.RIGHT);
+                    }
+                    leftFork.putDown(this, ForkPosition.LEFT);
+                }
+            }
+        } catch (final Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void think() throws InterruptedException {
+        System.out.printf("%s is thinking...%n", this);
+        TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextLong(1000L));
+    }
+
+    private void eat() throws InterruptedException {
+        System.out.printf("%s is eating...%n", this);
+        eatingCounter++;
+        TimeUnit.MILLISECONDS.sleep(ThreadLocalRandom.current().nextLong(1000L));
+    }
+
+    public void setFull(final boolean full) {
+        this.full = full;
+    }
+
+    public boolean isFull() {
+        return full;
+    }
+
+    public int getEatingCounter() {
+        return eatingCounter;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Philosopher %d", id);
+    }
+}
+```
+
+A demo run of the application for 5 seconds will ensure that no philosopher is starving and everyone gets a chance to
+eat. Thus, no deadlock or livelock.
+
+```java
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class DiningPhilosopherDemo {
+
+    private static final int NUMBER_OF_PHILOSOPHERS = 5;
+    private static final int NUMBER_OF_FORKS = 5;
+    private static final int SIMULATION_RUNNING_TIME = 5 * 1000;
+
+    public static void main(final String[] args) throws InterruptedException {
+        final Philosopher[] philosophers = new Philosopher[NUMBER_OF_PHILOSOPHERS];
+
+        final Fork[] forks = new Fork[NUMBER_OF_FORKS];
+        for (int i = 0; i < forks.length; i++) {
+            forks[i] = new Fork(i);
+        }
+
+        final ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_PHILOSOPHERS);
+
+        try {
+            for (int i = 0; i < philosophers.length; i++) {
+                philosophers[i] = new Philosopher(i, forks[i], forks[(i + 1) % forks.length]);
+                executorService.execute(philosophers[i]);
+            }
+
+            TimeUnit.MILLISECONDS.sleep(SIMULATION_RUNNING_TIME);
+
+            for (final Philosopher philosopher : philosophers) {
+                philosopher.setFull(true);
+            }
+        } finally {
+            executorService.shutdown();
+
+            while (!executorService.isTerminated()) {
+                TimeUnit.MILLISECONDS.sleep(1000L);
+            }
+
+            for (final Philosopher philosopher : philosophers) {
+                System.out.printf("%s eat #%d times%n", philosopher, philosopher.getEatingCounter());
+            }
+        }
+    }
+}
+```
+
+Sample output:
+
+```
+Philosopher 0 is thinking...
+Philosopher 4 is thinking...
+Philosopher 3 is thinking...
+Philosopher 2 is thinking...
+Philosopher 1 is thinking...
+Philosopher 2 picked up LEFT Fork 2
+Philosopher 2 picked up RIGHT Fork 3
+Philosopher 2 is eating...
+Philosopher 4 picked up LEFT Fork 4
+Philosopher 4 picked up RIGHT Fork 0
+Philosopher 4 is eating...
+Philosopher 2 puts down RIGHT Fork 3
+Philosopher 2 puts down LEFT Fork 2
+Philosopher 2 is thinking...
+Philosopher 1 picked up LEFT Fork 1
+Philosopher 1 picked up RIGHT Fork 2
+Philosopher 1 is eating...
+Philosopher 4 puts down RIGHT Fork 0
+Philosopher 4 puts down LEFT Fork 4
+Philosopher 4 is thinking...
+Philosopher 3 picked up LEFT Fork 3
+Philosopher 3 picked up RIGHT Fork 4
+Philosopher 3 is eating...
+Philosopher 0 picked up LEFT Fork 0
+Philosopher 1 puts down RIGHT Fork 2
+Philosopher 1 puts down LEFT Fork 1
+Philosopher 1 is thinking...
+Philosopher 0 picked up RIGHT Fork 1
+Philosopher 0 is eating...
+Philosopher 3 puts down RIGHT Fork 4
+Philosopher 3 puts down LEFT Fork 3
+Philosopher 3 is thinking...
+Philosopher 0 puts down RIGHT Fork 1
+Philosopher 0 puts down LEFT Fork 0
+Philosopher 0 is thinking...
+Philosopher 2 picked up LEFT Fork 2
+Philosopher 2 picked up RIGHT Fork 3
+Philosopher 2 is eating...
+Philosopher 4 picked up LEFT Fork 4
+Philosopher 4 picked up RIGHT Fork 0
+Philosopher 4 is eating...
+Philosopher 1 picked up LEFT Fork 1
+Philosopher 1 puts down LEFT Fork 1
+Philosopher 1 is thinking...
+Philosopher 0 is thinking...
+Philosopher 3 is thinking...
+Philosopher 0 is thinking...
+Philosopher 4 puts down RIGHT Fork 0
+Philosopher 4 puts down LEFT Fork 4
+Philosopher 4 is thinking...
+Philosopher 2 puts down RIGHT Fork 3
+Philosopher 2 puts down LEFT Fork 2
+Philosopher 2 is thinking...
+Philosopher 1 picked up LEFT Fork 1
+Philosopher 1 picked up RIGHT Fork 2
+Philosopher 1 is eating...
+Philosopher 2 is thinking...
+Philosopher 4 picked up LEFT Fork 4
+Philosopher 4 picked up RIGHT Fork 0
+Philosopher 4 is eating...
+Philosopher 3 picked up LEFT Fork 3
+Philosopher 3 puts down LEFT Fork 3
+Philosopher 3 is thinking...
+Philosopher 0 is thinking...
+Philosopher 0 is thinking...
+Philosopher 2 is thinking...
+Philosopher 3 picked up LEFT Fork 3
+Philosopher 3 puts down LEFT Fork 3
+Philosopher 3 is thinking...
+Philosopher 1 puts down RIGHT Fork 2
+Philosopher 1 puts down LEFT Fork 1
+Philosopher 1 is thinking...
+Philosopher 0 is thinking...
+Philosopher 4 puts down RIGHT Fork 0
+Philosopher 4 puts down LEFT Fork 4
+Philosopher 4 is thinking...
+Philosopher 2 picked up LEFT Fork 2
+Philosopher 2 picked up RIGHT Fork 3
+Philosopher 2 is eating...
+Philosopher 2 puts down RIGHT Fork 3
+Philosopher 2 puts down LEFT Fork 2
+Philosopher 2 is thinking...
+Philosopher 1 picked up LEFT Fork 1
+Philosopher 1 picked up RIGHT Fork 2
+Philosopher 1 is eating...
+Philosopher 2 is thinking...
+Philosopher 3 picked up LEFT Fork 3
+Philosopher 3 picked up RIGHT Fork 4
+Philosopher 3 is eating...
+Philosopher 2 is thinking...
+Philosopher 4 is thinking...
+Philosopher 2 is thinking...
+Philosopher 4 is thinking...
+Philosopher 0 picked up LEFT Fork 0
+Philosopher 0 puts down LEFT Fork 0
+Philosopher 0 is thinking...
+Philosopher 3 puts down RIGHT Fork 4
+Philosopher 3 puts down LEFT Fork 3
+Philosopher 3 is thinking...
+Philosopher 4 picked up LEFT Fork 4
+Philosopher 4 picked up RIGHT Fork 0
+Philosopher 4 is eating...
+Philosopher 3 picked up LEFT Fork 3
+Philosopher 3 puts down LEFT Fork 3
+Philosopher 3 is thinking...
+Philosopher 1 puts down RIGHT Fork 2
+Philosopher 1 puts down LEFT Fork 1
+Philosopher 1 is thinking...
+Philosopher 4 puts down RIGHT Fork 0
+Philosopher 4 puts down LEFT Fork 4
+Philosopher 4 is thinking...
+Philosopher 3 picked up LEFT Fork 3
+Philosopher 3 picked up RIGHT Fork 4
+Philosopher 3 is eating...
+Philosopher 2 picked up LEFT Fork 2
+Philosopher 2 puts down LEFT Fork 2
+Philosopher 0 picked up LEFT Fork 0
+Philosopher 0 picked up RIGHT Fork 1
+Philosopher 0 is eating...
+Philosopher 0 puts down RIGHT Fork 1
+Philosopher 0 puts down LEFT Fork 0
+Philosopher 3 puts down RIGHT Fork 4
+Philosopher 3 puts down LEFT Fork 3
+Philosopher 0 eat #2 times
+Philosopher 1 eat #3 times
+Philosopher 2 eat #3 times
+Philosopher 3 eat #3 times
+Philosopher 4 eat #4 times
+```
 

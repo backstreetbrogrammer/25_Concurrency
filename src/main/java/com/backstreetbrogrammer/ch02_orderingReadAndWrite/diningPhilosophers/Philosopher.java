@@ -23,12 +23,12 @@ public class Philosopher implements Runnable {
             // after eating a lot for random 1000 ms (1 seconds), we will terminate the given thread
             while (!full) {
                 think();
-                if (leftFork.pickUp(this, State.LEFT)) {
-                    if (rightFork.pickUp(this, State.RIGHT)) {
+                if (leftFork.pickUp(this, ForkPosition.LEFT)) {
+                    if (rightFork.pickUp(this, ForkPosition.RIGHT)) {
                         eat();
-                        rightFork.putDown(this, State.RIGHT);
+                        rightFork.putDown(this, ForkPosition.RIGHT);
                     }
-                    leftFork.putDown(this, State.LEFT);
+                    leftFork.putDown(this, ForkPosition.LEFT);
                 }
             }
         } catch (final Exception e) {
