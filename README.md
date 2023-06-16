@@ -39,9 +39,13 @@ partially-ordered components or units of computation.
 CPU will be executing processes one by one, individually by **time slice**. A time slice is short time frame that gets
 assigned to process for CPU execution.
 
+![Concurrency One Core](ConcurrencyOneCore.PNG)
+
 - Case 2: CPU with multiple cores
 
 Only on multicore CPU system, multiple processes execute at the **same** time on different cores.
+
+![Concurrency Multiple Cores](ConcurrencyMultipleCores.PNG)
 
 **Scheduler**
 
@@ -1163,6 +1167,8 @@ cache line is invalidated in the CPU caches of the other CPU where the other thr
 other CPUs need to reload the content of the invalidated cache line - even if they don't really need the variable that
 was modified within that cache line.
 
+![Cache Coherence](CacheCoherence.PNG)
+
 In simpler words, CPU cache is organized in lines of data. Each line can hold 8 longs - 64 bytes. When a visible
 variable is modified in L1 or L2 cache, all the line is marked "dirty" for the other caches. A read on a dirty line
 triggers a refresh of this line -> which is to flush the data from main memory.
@@ -1501,14 +1507,21 @@ public static <T extends Comparable<? super T>> Comparator<T> naturalOrder() {
 }
 ```
 
-#### Interview Problem 8 (MAANG): Dining Philosophers Problem
+#### Interview Problem 8 (Morgan Stanley, Goldman Sachs, MAANG): Dining Philosophers Problem
 
 - 5 philosophers are present at a table and there are 5 forks
 - the philosophers can **eat** and **think**
 - philosophers can eat when they have both left and right forks
 - a fork can be held by one philosopher at a given time (mutual exclusion)
 
-Problem: Create a concurrent algorithm so that no philosopher will starve. (avoid deadlock and starvation)
+**Problem: Create a concurrent algorithm so that no philosopher will starve. (avoid deadlock and starvation)**
 
 ![Dining Philosophers Problem](DiningPhilosophers.PNG)
+
+**How to handle deadlock and livelock?**
+
+1) Thread should not be blocked indefinitely => thus use `tryLock()` method of `Lock` interface
+2) Ensure that each thread acquires the locks in the **same order**
+3) Livelock can be handled with the above methods and some randomness => threads retry acquiring the locks at **random**
+   intervals 
 
