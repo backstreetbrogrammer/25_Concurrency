@@ -1830,3 +1830,154 @@ Philosopher 3 eat #3 times
 Philosopher 4 eat #4 times
 ```
 
+#### Interview Problem 9 (Merrill Lynch, MAANG): Students Library Problem
+
+- There are `m` students in a class and there are `n` books in a library
+- Books count `n` is always greater than number of students `m`
+- a student can go to the library and read a book
+- a book can be held by only one student at a given time (mutual exclusion)
+
+![Students Library](StudentsLibrary.PNG)
+
+**Problem: Create a concurrent algorithm so that every student gets a chance to read a book. (avoid deadlock and
+starvation)**
+
+**Solution**
+
+`Books` class with synchronized `read` method:
+
+```java
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Book {
+
+    private final int id;
+    private final Lock lock;
+
+    public Book(final int id) {
+        this.id = id;
+        this.lock = new ReentrantLock();
+    }
+
+    public void read(final Student student) throws InterruptedException {
+        if (lock.tryLock(10, TimeUnit.MINUTES)) {
+            try {
+                System.out.printf("%s start reading %s%n", student, this);
+                TimeUnit.SECONDS.sleep(2L);
+            } finally {
+                lock.unlock();
+                System.out.printf("%s has just finished reading %s%n", student, this);
+            }
+        }
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Book %d", id);
+    }
+}
+```
+
+Every `Student` can be implemented as a thread:
+
+```java
+import java.util.concurrent.ThreadLocalRandom;
+
+public class Student implements Runnable {
+
+    private final int id;
+    private final Book[] books;
+
+    public Student(final int id, final Book[] books) {
+        this.id = id;
+        this.books = books;
+    }
+
+    @Override
+    public void run() {
+        while (true) {
+            final int bookId = ThreadLocalRandom.current().nextInt(books.length);
+            try {
+                books[bookId].read(this);
+            } catch (final InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Student %d", id);
+    }
+}
+```
+
+Now we can run the demo with 5 students and 7 books:
+
+```java
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class StudentsLibraryDemo {
+
+    private static final int NUM_OF_STUDENTS = 5;
+    private static final int NUM_OF_BOOKS = 7;
+
+    public static void main(final String[] args) {
+        final Book[] books = new Book[NUM_OF_BOOKS];
+        for (int i = 0; i < NUM_OF_BOOKS; i++) {
+            books[i] = new Book(i + 1);
+        }
+
+        final Student[] students = new Student[NUM_OF_STUDENTS];
+        final ExecutorService executorService = Executors.newFixedThreadPool(NUM_OF_STUDENTS);
+
+        try {
+            for (int i = 0; i < NUM_OF_STUDENTS; i++) {
+                students[i] = new Student(i + 1, books);
+                executorService.execute(students[i]);
+            }
+        } catch (final Exception e) {
+            e.printStackTrace();
+        } finally {
+            executorService.shutdown();
+        }
+    }
+}
+```
+
+Sample output (need to terminate the program as the students read indefinitely):
+
+```
+Student 1 start reading Book 7
+Student 4 start reading Book 4
+Student 3 start reading Book 5
+Student 3 has just finished reading Book 5
+Student 3 start reading Book 5
+Student 4 has just finished reading Book 4
+Student 4 start reading Book 3
+Student 5 start reading Book 4
+Student 1 has just finished reading Book 7
+Student 1 start reading Book 2
+Student 1 has just finished reading Book 2
+Student 3 has just finished reading Book 5
+Student 2 start reading Book 4
+Student 5 has just finished reading Book 4
+Student 4 has just finished reading Book 3
+Student 3 start reading Book 7
+Student 1 start reading Book 1
+Student 4 start reading Book 2
+Student 1 has just finished reading Book 1
+Student 5 start reading Book 4
+Student 2 has just finished reading Book 4
+Student 3 has just finished reading Book 7
+Student 4 has just finished reading Book 2
+Student 4 start reading Book 5
+Student 4 has just finished reading Book 5
+Student 1 start reading Book 4
+Student 5 has just finished reading Book 4
+Student 5 start reading Book 6
+```
+
