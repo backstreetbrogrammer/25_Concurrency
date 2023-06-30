@@ -790,9 +790,9 @@ indefinitely and never be able to produce or write anything to buffer.
 
 **Solution**:
 
-We need a mechanism to somehow **"park"** this consumer thread when the buffer is empty and release the lock. Then the
-producer thread can acquire this lock and write to the buffer. When the **"parked"** consumer thread is woken up again -
-the buffer will not be empty this time, and it can consume the item.
+We need a mechanism to somehow "park" this consumer thread when the buffer is empty and release the lock. Then the
+producer thread can acquire this lock and write to the buffer. When the "parked" consumer thread is woken up again - the
+buffer will not be empty this time, and it can consume the item.
 
 This is the `wait()` / `notify()` pattern.
 
@@ -800,14 +800,13 @@ The `wait()`, `notify()` and `notifyAll()` methods are defined in `java.lang.Obj
 a given object => normally the object lock being used. The thread executing the invocation should hold that object key.
 Thus, in other words, these methods cannot be invoked outside a synchronized block.
 
-Calling `wait()` releases the key (object lock) held by this thread and puts the thread in **WAIT** forkPosition. The
-only way to release a thread from a **WAIT** forkPosition is to **notify** it.
+Calling `wait()` releases the key (object lock) held by this thread and puts the thread in **WAIT** state. The only way
+to release a thread from a **WAIT** state is to **notify** it.
 
-Calling `notify()` release a thread in **WAIT** forkPosition and puts it in **RUNNABLE** forkPosition. This is the only
-way to release a waiting thread. The released thread is chosen randomly. For `notifyAll()`, **all** the threads are
-moved from **WAIT**
-forkPosition to **RUNNABLE** forkPosition, however only one thread can acquire the lock again. However, the woken
-threads can do other task rather than waiting for the object again.
+Calling `notify()` release a thread in **WAIT** state and puts it in **RUNNABLE** state. This is the only way to release
+a waiting thread. The released thread is chosen randomly. For `notifyAll()`, **all** the threads are moved from **WAIT**
+state to **RUNNABLE** state, however only one thread can acquire the lock again. However, the woken threads can do other
+task rather than waiting for the object again.
 
 **Producer**:
 
@@ -1003,38 +1002,36 @@ advanced locking, condition variables or semaphores to get the same result.
 
 #### Thread states
 
-A thread has a forkPosition - for example, it can be running or not. We can get the thread forkPosition by
-calling `getState()`
+A thread has a state - for example, it can be running or not. We can get the thread state by calling `getState()`
 method on thread.
 
 ```
 final Thread t1 = new Thread();
 ...
-Thread.State forkPosition = t1.getState();
+Thread.State state = t1.getState();
 ```
 
 Java API already defines **enum** `Thread.State` as
-follows:  `public static enum Thread.State extends Enum<Thread. State>`
+follows:  `public static enum Thread.State extends Enum<Thread.State>`
 
 A thread can be in one of the following states:
 
-- **NEW**: A thread that has not yet started is in this forkPosition.
-- **RUNNABLE**: A thread executing in the Java virtual machine is in this forkPosition.
-- **BLOCKED**: A thread that is blocked waiting for a monitor lock is in this forkPosition.
-- **WAITING**: A thread that is waiting indefinitely for another thread to perform a particular action is in this
-  forkPosition.
+- **NEW**: A thread that has not yet started is in this state.
+- **RUNNABLE**: A thread executing in the Java virtual machine is in this state.
+- **BLOCKED**: A thread that is blocked waiting for a monitor lock is in this state.
+- **WAITING**: A thread that is waiting indefinitely for another thread to perform a particular action is in this state.
 - **TIMED_WAITING**: A thread that is waiting for another thread to perform an action for up to a specified waiting time
-  is in this forkPosition.
-- **TERMINATED**: A thread that has exited is in this forkPosition.
+  is in this state.
+- **TERMINATED**: A thread that has exited is in this state.
 
 ![Thread States](ThreadStates.PNG)
 
-A thread can be in only one forkPosition at a given point in time. These states are virtual machine states which do not
-reflect any operating system thread states.
+A thread can be in only one state at a given point in time. These states are virtual machine states which do not reflect
+any operating system thread states.
 
 NOTE: If a thread is not running, can it be given hand by the thread scheduler ?
 
-Answer is **no** => thread scheduler will only schedule threads which are in **RUNNABLE** forkPosition.
+Answer is **no** => thread scheduler will only schedule threads which are in **RUNNABLE** state.
 
 ---
 
